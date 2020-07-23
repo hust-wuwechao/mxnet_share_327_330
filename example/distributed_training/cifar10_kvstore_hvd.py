@@ -26,7 +26,6 @@ import time
 import random
 import types
 import warnings
-
 import numpy as np
 import mxnet as mx
 from mxnet import autograd, gluon, kv, nd
@@ -74,7 +73,6 @@ def train(batch_list, context, network, gluon_trainer, metric):
     gluon_trainer:
       rain module of gluon
     """
-
     # Run one forward and backward pass
     def forward_backward(network, data, labels, metric):
         with autograd.record():
@@ -91,7 +89,6 @@ def train(batch_list, context, network, gluon_trainer, metric):
 
     # Use cross entropy loss
     loss = gluon.loss.SoftmaxCrossEntropyLoss()
-
     # Split and load data
     data = batch_list[0]
     data = gluon.utils.split_and_load(data, context)
@@ -174,17 +171,14 @@ class SplitSampler(gluon.data.sampler.Sampler):
 
     def __len__(self):
         return self.part_len
-
-
 # Use Horovod as the KVStore
 store = kv.create('horovod')
-
 # Get the number of workers
+#获取num_workers的数目
 num_workers = store.num_workers
-
 # Create the context based on the local rank of the current process
+#store.local_rank 包括了4个GPU
 ctx = mx.cpu(store.local_rank) if args.no_cuda else mx.gpu(store.local_rank)
-
 # Load the training data
 train_data = gluon.data.DataLoader(gluon.data.vision.CIFAR10(train=True,
                                    transform=transform), args.batch_size,
@@ -199,17 +193,14 @@ test_data = gluon.data.DataLoader(gluon.data.vision.CIFAR10(train=False,
 
 # Load ResNet18 model from GluonCV model zoo
 net = vision.resnet18_v1()
-
 # Initialize the parameters with Xavier initializer
 net.initialize(mx.init.Xavier(), ctx=ctx)
-
 # Use Adam optimizer. Ask trainer to use the distributor kv store.
+# 这里面传入kvstore
 trainer = gluon.Trainer(net.collect_params(), optimizer='adam',
                         optimizer_params={'learning_rate': args.lr},
                         kvstore=store)
-
 train_metric = mx.gluon.metric.Accuracy()
-
 # Run as many epochs as required
 for epoch in range(args.epochs):
     tic = time.time()
@@ -221,6 +212,7 @@ for epoch in range(args.epochs):
     for batch in train_data:
         # Train the batch using multiple GPUs
         train(batch, [ctx], net, trainer, train_metric)
+        #由第一个worker负责输出所有的信息
         if store.rank == 0 and batch_num % 100 == 0:
             speed = args.batch_size / (time.time() - btic)
             logging.info('Epoch[{}] Rank [{}] Batch[{}]\tSpeed: {:.2f} samples/sec'
